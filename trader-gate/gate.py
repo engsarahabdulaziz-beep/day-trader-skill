@@ -6,6 +6,8 @@ keeps no memory between days. This glue hands each order to two skills from
 tradermonty/claude-trading-skills: trader-memory-core (a thesis per trade, so a
 losing exit can block a revenge entry inside 24 hours) and
 pre-trade-discipline-gate (GO / NO_GO / REVIEW_REQUIRED before manual entry).
+The market posture comes from exposure-coach, fed by the breadth, uptrend and
+macro-regime analyzers (the inputs that need no API key).
 
     python3 trader-gate/gate.py            # reads trader/orders.json + trader/state/risk.json
     python3 trader-gate/gate.py --as-of 2026-10-19T10:15:00-04:00
@@ -17,6 +19,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 SKILLS = Path(os.environ.get("TRADING_SKILLS_DIR", Path.home() / ".claude" / "skills"))
@@ -52,6 +55,34 @@ def register(order, state_dir, work):
                    check=True, capture_output=True, text=True)
     new = sorted(thesis_ids(state_dir) - before)
     return new[0] if new else None
+
+
+def market_posture(out):
+    """Today's exposure-coach posture (NEW_ENTRY_ALLOWED / REDUCE_ONLY /
+    CASH_PRIORITY), built from the three inputs that need no API key. Computed
+    once a day: the inputs are daily series, so re-running intraday adds nothing."""
+    out.mkdir(parents=True, exist_ok=True)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    done = sorted(out.glob("exposure_posture_%s_*.json" % today))
+    if done:
+        return done[-1]
+    inputs = [("--breadth", "market-breadth-analyzer", "market_breadth_analyzer.py", "market_breadth_2*.json"),
+              ("--uptrend", "uptrend-analyzer", "uptrend_analyzer.py", "uptrend_analysis_*.json"),
+              ("--regime", "macro-regime-detector", "macro_regime_detector.py", "macro_regime_*.json")]
+    args = []
+    for flag, skill, script, pattern in inputs:
+        subprocess.run([sys.executable, str(SKILLS / skill / "scripts" / script), "--output-dir", str(out)],
+                       capture_output=True, text=True)
+        fresh = sorted(out.glob(pattern.replace("*", today + "_*", 1) if "2*" not in pattern
+                                else "market_breadth_%s_*.json" % today))
+        if fresh:
+            args += [flag, str(fresh[-1])]
+    if not args:
+        return None
+    subprocess.run([sys.executable, str(SKILLS / "exposure-coach" / "scripts" / "calculate_exposure.py"),
+                    *args, "--output-dir", str(out)], capture_output=True, text=True)
+    done = sorted(out.glob("exposure_posture_%s_*.json" % today))
+    return done[-1] if done else None
 
 
 def main():
@@ -102,20 +133,17 @@ def main():
         "entries_placed": today.get("entries_placed", 0),
         "loss_at_risk": today.get("loss_at_risk", 0),
     }, indent=2))
-    # No market-regime skill is installed. The gate treats a missing artifact as
-    # REVIEW_REQUIRED on every order, so this states the gap instead of hiding it.
-    regime = work / "exposure_decision.json"
-    regime.write_text(json.dumps({
-        "recommendation": "NEW_ENTRY_ALLOWED",
-        "source": "not evaluated: no market-regime filter configured",
-    }, indent=2))
+    regime = market_posture(root / "state" / "market")
 
     cmd = [sys.executable, str(GATE), "--answers-file", str(answers),
            "--state-dir", str(theses),
-           "--market-regime-decision", str(regime),
            "--circuit-breaker-decision", str(breaker),
            "--output-dir", str(work / "reports"),
            "--journal-dir", str(root / "state" / "journal")]
+    # No posture file means the gate answers REVIEW_REQUIRED, which is the honest
+    # result when the market could not be read.
+    if regime:
+        cmd += ["--market-regime-decision", str(regime)]
     if a.as_of:
         cmd += ["--as-of", a.as_of]
     return subprocess.call(cmd)
