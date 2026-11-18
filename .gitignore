@@ -1,0 +1,6 @@
+# Personal account data: never commit
+trader/portfolio.json
+trader/config.json
+trader/prices.json
+trader/orders.json
+trader/state/broker.json
