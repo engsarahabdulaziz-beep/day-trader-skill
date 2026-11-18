@@ -134,6 +134,23 @@ def main():
         "loss_at_risk": today.get("loss_at_risk", 0),
     }, indent=2))
     regime = market_posture(root / "state" / "market")
+    if regime and not cfg.get("market_posture_blocks", True):
+        # The user chose to treat the posture as a warning: exposure-coach sets a
+        # multi-week exposure ceiling, which is stricter than a trade that is flat
+        # by the close needs. The real reading is kept and printed, never dropped.
+        real = read(regime)
+        advisory = work / "exposure_decision_advisory.json"
+        advisory.write_text(json.dumps({
+            "recommendation": "NEW_ENTRY_ALLOWED",
+            "source": "advisory mode (market_posture_blocks is false in the config)",
+            "real_recommendation": real.get("recommendation"),
+            "real_exposure_ceiling_pct": real.get("exposure_ceiling_pct"),
+            "real_confidence": real.get("confidence"),
+        }, indent=2))
+        print("MARKET WARNING (not blocking): posture %s, exposure ceiling %s%%, confidence %s"
+              % (real.get("recommendation"), real.get("exposure_ceiling_pct"), real.get("confidence")),
+              flush=True)
+        regime = advisory
 
     cmd = [sys.executable, str(GATE), "--answers-file", str(answers),
            "--state-dir", str(theses),
