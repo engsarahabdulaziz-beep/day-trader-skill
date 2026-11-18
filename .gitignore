@@ -3,4 +3,6 @@ trader/portfolio.json
 trader/config.json
 trader/prices.json
 trader/orders.json
-trader/state/broker.json
+trader/plan.json
+trader/entry.json
+trader/state/
