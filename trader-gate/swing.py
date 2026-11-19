@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Paper ledger for multi-day setups from the daily scan.
 
-Why this exists: the daily scan tags 20-day closing-high breakouts, but nothing
-says whether buying them and holding for days pays. Only that setup is recorded,
-because it is the one trader-gate/backtest_swing.py tested; bull flags and
-20-day-average reclaims were dropped on 2026-11-19. This records a fixed, mechanical version of that trade and
+Why this exists: the daily scan tags 20-day closing-high breakouts and reclaims
+of the 20-day average, but nothing says whether buying them and holding for days
+pays. Both were positive in both halves of trader-gate/backtest_swing.py --grid,
+so both are recorded, up to --count picks per setup a day; bull flags are left
+out (too few trades in the backtest to trust). This records a fixed, mechanical version of that trade and
 settles it from real daily bars, so the rule can be judged before money is on it.
 
     python3 trader-gate/swing.py add       # after the open: today's picks from the daily watchlist
@@ -33,7 +34,7 @@ from zoneinfo import ZoneInfo
 
 NY = ZoneInfo("America/New_York")
 LEDGER = Path("paper/swing.csv")
-SETUPS = {"breakout_20d"}
+SETUPS = ("breakout_20d", "reclaim_ma20")
 FIELDS = ["signal_date", "entry_date", "symbol", "setups", "posture", "entry", "stop", "target", "shares",
           "status", "exit_date", "exit", "days_held", "net"]
 HOLD_DAYS = 30
@@ -80,6 +81,34 @@ def posture(day):
     return json.loads(Path(files[-1]).read_text()).get("recommendation", "unknown")
 
 
+def paper_trade(h, today, cfg):
+    """The mechanical paper entry for one scan hit, or None when it cannot be taken."""
+    try:
+        bars = daily(h["symbol"])
+    except Exception as e:  # one bad symbol must not lose the rest
+        print("%s: Data Unavailable (%s)" % (h["symbol"], str(e)[:60]))
+        return None
+    day = [b for b in bars if b[0] == today]
+    before = [b for b in bars if b[0] < today]
+    if not day or len(before) < 15:
+        print("%s: no %s bar yet, skipped" % (h["symbol"], today))
+        return None
+    entry = day[0][1]
+    risk = ATR_MULT * atr14(before)
+    shares = min(int(cfg["max_loss_per_trade_usd"] / risk), int(cfg["max_order_usd"] / entry))
+    if shares < 1:
+        print("%s: one share risks more than the max loss, skipped" % h["symbol"])
+        return None
+    print("added %s (%s) entry %.2f stop %.2f target %.2f x%d"
+          % (h["symbol"], "+".join(t for t in SETUPS if t in h["setups"]), entry, entry - risk,
+             entry + REWARD * risk, shares))
+    return dict.fromkeys(FIELDS, "") | {
+        "signal_date": before[-1][0], "entry_date": today, "symbol": h["symbol"],
+        "setups": "+".join(t for t in SETUPS if t in h["setups"]), "posture": posture(today),
+        "entry": "%.2f" % entry, "stop": "%.2f" % (entry - risk), "target": "%.2f" % (entry + REWARD * risk),
+        "shares": shares, "status": "open"}
+
+
 def cmd_add(a):
     cfg = json.loads(Path("trader/config.json").read_text())
     today = a.date or datetime.now(NY).strftime("%Y-%m-%d")
@@ -88,35 +117,21 @@ def cmd_add(a):
         sys.exit("swing.py: %s is not a daily scan" % a.watchlist)
     rows = load()
     open_syms = {r["symbol"] for r in rows if r["status"] == "open"}
-    picks = [h for h in watch["hits"] if SETUPS & set(h["setups"]) and h["symbol"] not in open_syms]
-    picks.sort(key=lambda h: -h["price"] * h["volume"])
-    added = 0
-    for h in picks:
-        if added >= a.count:
-            break
-        try:
-            bars = daily(h["symbol"])
-        except Exception as e:  # one bad symbol must not lose the rest
-            print("%s: Data Unavailable (%s)" % (h["symbol"], str(e)[:60]))
-            continue
-        day = [b for b in bars if b[0] == today]
-        before = [b for b in bars if b[0] < today]
-        if not day or len(before) < 15:
-            print("%s: no %s bar yet, skipped" % (h["symbol"], today))
-            continue
-        entry = day[0][1]
-        risk = ATR_MULT * atr14(before)
-        shares = min(int(cfg["max_loss_per_trade_usd"] / risk), int(cfg["max_order_usd"] / entry))
-        if shares < 1:
-            print("%s: one share risks more than the max loss, skipped" % h["symbol"])
-            continue
-        rows.append(dict.fromkeys(FIELDS, "") | {
-            "signal_date": before[-1][0], "entry_date": today, "symbol": h["symbol"],
-            "setups": "+".join(sorted(SETUPS & set(h["setups"]))), "posture": posture(today),
-            "entry": "%.2f" % entry, "stop": "%.2f" % (entry - risk), "target": "%.2f" % (entry + REWARD * risk),
-            "shares": shares, "status": "open"})
-        added += 1
-        print("added %s entry %.2f stop %.2f target %.2f x%d" % (h["symbol"], entry, entry - risk, entry + REWARD * risk, shares))
+    for setup in SETUPS:
+        # Rows already added today count, so a second run on the same day adds nothing new.
+        have = sum(r["entry_date"] == today and r["setups"].split("+")[0] == setup for r in rows)
+        tagged = [h for h in watch["hits"] if setup in h["setups"]]
+        tagged.sort(key=lambda h: -h["price"] * h["volume"])
+        for h in tagged:
+            if have >= a.count:
+                break
+            if h["symbol"] in open_syms:
+                continue
+            row = paper_trade(h, today, cfg)
+            if row:
+                rows.append(row)
+                open_syms.add(h["symbol"])
+                have += 1
     save(rows)
 
 
@@ -162,6 +177,9 @@ def cmd_summary(_):
     print("%d open, %d closed: %d target, %d stop, %d time exit. Hypothetical net after commission: $%.2f"
           % (len(rows) - len(done), len(done), count("target"), count("stop"), count("time"),
              sum(float(r["net"]) for r in done)))
+    for setup in SETUPS:
+        sub = [r for r in done if setup in r["setups"].split("+")]
+        print("  %s: %d closed, net $%.2f" % (setup, len(sub), sum(float(r["net"]) for r in sub)))
     for p in sorted({r["posture"] for r in done}):
         sub = [r for r in done if r["posture"] == p]
         print("  entered under %s: %d closed, net $%.2f" % (p, len(sub), sum(float(r["net"]) for r in sub)))
@@ -173,7 +191,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("add")
     p.add_argument("--watchlist", default="trader/state/watchlist-daily.json")
-    p.add_argument("--count", type=int, default=3)
+    p.add_argument("--count", type=int, default=3, help="picks per setup a day")
     p.add_argument("--date")
     p.set_defaults(fn=cmd_add)
     p = sub.add_parser("settle")

@@ -3,3 +3,6 @@ signal_date,entry_date,symbol,setups,posture,entry,stop,target,shares,status,exi
 2026-11-18,2026-11-19,DIS,breakout_20d,CASH_PRIORITY,121.96,115.38,141.73,4,open,,,,
 2026-11-18,2026-11-19,TGT,breakout_20d,CASH_PRIORITY,166.97,154.54,204.25,2,open,,,,
 2026-11-18,2026-11-19,IBN,breakout_20d,CASH_PRIORITY,34.91,33.29,39.77,18,open,,,,
+2026-11-18,2026-11-19,TTWO,reclaim_ma20,CASH_PRIORITY,213.87,187.83,291.97,1,open,,,,
+2026-11-18,2026-11-19,OKTA,reclaim_ma20,CASH_PRIORITY,203.25,173.44,292.69,1,open,,,,
+2026-11-18,2026-11-19,TJX,reclaim_ma20,CASH_PRIORITY,138.59,128.82,167.89,3,open,,,,
