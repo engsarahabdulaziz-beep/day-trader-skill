@@ -1,4 +1,4 @@
 signal_date,entry_date,symbol,setups,posture,entry,stop,target,shares,status,exit_date,exit,days_held,net
-2026-11-17,2026-11-18,SPCX,reclaim_ma20,CASH_PRIORITY,143.24,127.44,174.83,1,open,,,1,
-2026-11-17,2026-11-18,HD,bull_flag,CASH_PRIORITY,331.25,310.25,373.25,1,open,,,1,
-2026-11-17,2026-11-18,SLS,breakout_20d+reclaim_ma20,CASH_PRIORITY,19.51,15.25,28.04,7,open,,,1,
+2026-11-17,2026-11-18,SPCX,reclaim_ma20,CASH_PRIORITY,143.24,127.44,190.64,1,open,,,1,
+2026-11-17,2026-11-18,HD,bull_flag,CASH_PRIORITY,331.25,310.25,394.25,1,open,,,1,
+2026-11-17,2026-11-18,SLS,breakout_20d+reclaim_ma20,CASH_PRIORITY,19.51,15.25,32.29,7,open,,,1,

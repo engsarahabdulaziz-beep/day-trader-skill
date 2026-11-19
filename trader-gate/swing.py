@@ -11,8 +11,10 @@ settles it from real daily bars, so the rule can be judged before money is on it
     python3 trader-gate/swing.py summary
 
 The paper trade: buy at the day's open, the first session after the signal.
-Stop 2 x ATR(14) under the entry, target 2 x that risk above it, out at the
-close of the 15th session if neither came first. A gap through the stop exits
+Stop 2 x ATR(14) under the entry, target 3 x that risk above it, out at the
+close of the 30th session if neither came first (changed from 2R / 15 sessions
+on 2026-11-19 after trader-gate/backtest_swing.py --grid; rows already open
+were moved to the new target). A gap through the stop exits
 at that day's open. On a day that touches both, the stop counts. Shares are
 sized to the max loss per trade. Every row also records the market posture of
 its entry day, so blocked days can be compared with allowed ones.
@@ -33,9 +35,9 @@ LEDGER = Path("paper/swing.csv")
 SETUPS = {"breakout_20d", "bull_flag", "reclaim_ma20"}
 FIELDS = ["signal_date", "entry_date", "symbol", "setups", "posture", "entry", "stop", "target", "shares",
           "status", "exit_date", "exit", "days_held", "net"]
-HOLD_DAYS = 15
+HOLD_DAYS = 30
 ATR_MULT = 2.0
-REWARD = 2.0
+REWARD = 3.0
 
 
 def daily(symbol):
