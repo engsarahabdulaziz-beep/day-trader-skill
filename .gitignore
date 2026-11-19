@@ -6,3 +6,4 @@ trader/orders.json
 trader/plan.json
 trader/entry.json
 trader/state/
+__pycache__/
