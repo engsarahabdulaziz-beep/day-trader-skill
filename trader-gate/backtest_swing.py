@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Backtest the multi-day paper rule from swing.py on years of daily bars.
 
+--setup picks the entry signal: breakout (20-day closing high, the default and
+the one swing.py records), flag (bull flag) or reclaim (back above the 20-day
+average), each defined as trader-scanner/scan.py tags it.
+
 Why this exists: the paper ledger needs weeks to say anything; this asks the
 same question of years of history today. Base rule, as in swing.py: buy at the
 next open after a close above every close of the prior 20 sessions, stop
@@ -55,6 +59,12 @@ def prepare(df, spy_ok):
     out["ATR"] = tr.rolling(14).mean()
     out["HI20"] = c.shift(1).rolling(20).max()
     out["MA200"] = c.rolling(200).mean()
+    # The three daily-scan rules, exactly as trader-scanner/scan.py find_setups() tags them.
+    ma20 = c.rolling(20).mean()
+    out["SIG_breakout"] = (c > out.HI20).astype(int)
+    out["SIG_flag"] = (((c.shift(5) / c.shift(15) - 1) > 0.10)
+                       & ((c.rolling(5).max() - c.rolling(5).min()) / c < 0.05)).astype(int)
+    out["SIG_reclaim"] = ((c.shift(1) < ma20.shift(1)) & (c > ma20)).astype(int)
     out["SPYOK"] = spy_ok.reindex(out.index).ffill().fillna(0)
     return out.dropna()
 
@@ -65,6 +75,7 @@ class Breakout20(Strategy):
     reward = 2.0
     market = False
     trend = False
+    setup = "breakout"
 
     def init(self):
         pass  # indicators are precomputed columns, see prepare()
@@ -76,7 +87,7 @@ class Breakout20(Strategy):
         if self.position:
             return
         d = self.data
-        if d.Close[-1] <= d.HI20[-1]:
+        if not getattr(d, "SIG_" + self.setup)[-1]:
             return
         if self.market and not d.SPYOK[-1]:
             return
@@ -124,7 +135,7 @@ GRID = [dict(market=m, trend=t, mult=mu, reward=r, hold=h)
 
 
 def label(p):
-    return "%s%s stop %gxATR target %gR hold %d" % ("market " if p["market"] else "",
+    return "%s %s%s stop %gxATR target %gR hold %d" % (p.get("setup", "breakout"), "market " if p["market"] else "",
                                                     "trend " if p["trend"] else "",
                                                     p["mult"], p["reward"], p["hold"])
 
@@ -139,10 +150,11 @@ def main():
     ap.add_argument("--reward", type=float, default=2.0)
     ap.add_argument("--hold", type=int, default=15)
     ap.add_argument("--grid", action="store_true")
+    ap.add_argument("--setup", default="breakout", choices=("breakout", "flag", "reclaim"))
     a = ap.parse_args()
     data = load(a.symbols.split(","), a.years)
     if not a.grid:
-        p = dict(market=a.market, trend=a.trend, mult=a.mult, reward=a.reward, hold=a.hold)
+        p = dict(market=a.market, trend=a.trend, mult=a.mult, reward=a.reward, hold=a.hold, setup=a.setup)
         print(label(p), run(data, p))
     else:
         start = min(df.index[0] for df in data.values())
@@ -152,6 +164,7 @@ def main():
                   "second half %s to %s" % (cut.date(), end.date()): {s: d[d.index >= cut] for s, d in data.items()}}
         rows = []
         for p in GRID:
+            p = dict(p, setup=a.setup)
             row = {"variant": label(p)}
             for i, (name, part) in enumerate(halves.items()):
                 r = run(part, p)
