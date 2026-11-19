@@ -1,2 +1,5 @@
 signal_date,entry_date,symbol,setups,posture,entry,stop,target,shares,status,exit_date,exit,days_held,net
 2026-11-17,2026-11-18,SLS,breakout_20d+reclaim_ma20,CASH_PRIORITY,19.51,15.25,32.29,7,open,,,1,
+2026-11-18,2026-11-19,DIS,breakout_20d,CASH_PRIORITY,121.96,115.38,141.73,4,open,,,,
+2026-11-18,2026-11-19,TGT,breakout_20d,CASH_PRIORITY,166.97,154.54,204.25,2,open,,,,
+2026-11-18,2026-11-19,IBN,breakout_20d,CASH_PRIORITY,34.91,33.29,39.77,18,open,,,,
