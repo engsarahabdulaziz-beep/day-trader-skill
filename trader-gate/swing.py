@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Paper ledger for multi-day setups from the daily scan.
 
-Why this exists: the daily scan tags charts (20-day breakout, bull flag,
-reclaimed the 20-day average) but nothing says whether buying them and holding
-for days pays. This records a fixed, mechanical version of that trade and
+Why this exists: the daily scan tags 20-day closing-high breakouts, but nothing
+says whether buying them and holding for days pays. Only that setup is recorded,
+because it is the one trader-gate/backtest_swing.py tested; bull flags and
+20-day-average reclaims were dropped on 2026-11-19. This records a fixed, mechanical version of that trade and
 settles it from real daily bars, so the rule can be judged before money is on it.
 
     python3 trader-gate/swing.py add       # after the open: today's picks from the daily watchlist
@@ -32,7 +33,7 @@ from zoneinfo import ZoneInfo
 
 NY = ZoneInfo("America/New_York")
 LEDGER = Path("paper/swing.csv")
-SETUPS = {"breakout_20d", "bull_flag", "reclaim_ma20"}
+SETUPS = {"breakout_20d"}
 FIELDS = ["signal_date", "entry_date", "symbol", "setups", "posture", "entry", "stop", "target", "shares",
           "status", "exit_date", "exit", "days_held", "net"]
 HOLD_DAYS = 30
